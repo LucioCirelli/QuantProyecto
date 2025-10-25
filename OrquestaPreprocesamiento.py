@@ -34,8 +34,7 @@ def ejecutar_pipeline():
     """Pipeline simplificado de análisis."""
     
     # Crear carpeta de corrida
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    dir_corrida = os.path.join('Corridas', f'{timestamp}_{NOMBRE_CORRIDA}')
+    dir_corrida = os.path.join('Corridas', f'{NOMBRE_CORRIDA}')
     os.makedirs(dir_corrida, exist_ok=True)
     
     print(f"\n🚀 Corrida: {dir_corrida}\n")
