@@ -14,14 +14,6 @@ def modelo_estocastico(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=
     # Lectura de datos
     with open(f'Corridas/{nombre_corrida}/inputs_modelo.pkl', 'rb') as f:
         inputs_modelo = pickle.load(f)
-        
-        
-    max_acciones = 10
-    w_minimo = 0.05
-    w_maximo = 0.3
-    w_renta_fija = 0.2
-    tasa_mensual_renta_fija = 0.08/12
-    rendimiento_minimo = np.log(0.015)
 
     model = pyo.ConcreteModel()
 
@@ -115,4 +107,14 @@ def modelo_estocastico(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=
 
 if __name__ == "__main__":
     nombre_corrida = "20241010_123456_analisis_sp500"  # Cambiar según la corrida deseada
-    modelo_estocastico(nombre_corrida)
+    
+    max_acciones = 10
+    w_minimo = 0.05
+    w_maximo = 0.3
+    w_renta_fija = 0.2
+    tasa_mensual_renta_fija = 0.08/12
+    rendimiento_minimo = np.log(0.015)
+    
+    modelo_estocastico(nombre_corrida, max_acciones, w_minimo, w_maximo,
+                       w_renta_fija, tasa_mensual_renta_fija,
+                       rendimiento_minimo)
