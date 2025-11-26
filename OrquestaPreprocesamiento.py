@@ -19,34 +19,27 @@ from utils.Preprocesamiento import generar_inputs_modelo, resumen_inputs
 # CONFIGURACIÓN
 # ============================================================================
 
-NOMBRE_CORRIDA = "analisis_sp500"
-START_YEAR = 2010
-END_YEAR = 2023
-ALPHA_EWMA = 0.94
-MAX_ACTIVOS = None  # None = todos
-
-
 # ============================================================================
 # PIPELINE
 # ============================================================================
 
-def ejecutar_pipeline():
+def ejecutar_preprocesamiento(nombre_corrida, start_year, end_year, alpha_ewma, max_activos = None):
     """Pipeline simplificado de análisis."""
     
     # Crear carpeta de corrida
-    dir_corrida = os.path.join('Corridas', f'{NOMBRE_CORRIDA}')
+    dir_corrida = os.path.join('Corridas', f'{nombre_corrida}')
     os.makedirs(dir_corrida, exist_ok=True)
     
     print(f"\n🚀 Corrida: {dir_corrida}\n")
     
     # 1. Descargar datos
     print("📥 Descargando datos S&P 500...")
-    df_datos = descargar_sp500_mensual(START_YEAR, END_YEAR, guardar_csv=False)
+    df_datos = descargar_sp500_mensual(start_year, end_year, guardar_csv=False)
     print(f"✅ {len(df_datos['Ticker'].unique())} tickers descargados")
     
     # 2. Calcular rendimientos y covarianzas
     print("\n📊 Calculando rendimientos y covarianzas...")
-    mu_pred, cov_ewma = proyectar_rendimientos(df_datos, alpha=ALPHA_EWMA)
+    mu_pred, cov_ewma = proyectar_rendimientos(df_datos, alpha=alpha_ewma)
     desv_std = pd.Series(np.sqrt(np.diag(cov_ewma)), index=cov_ewma.index)
     print(f"✅ Matriz de covarianzas: {cov_ewma.shape}")
     
@@ -54,8 +47,8 @@ def ejecutar_pipeline():
     print("\n🔬 Generando inputs para modelo estocástico...")
     inputs_modelo = generar_inputs_modelo(
         df_datos,
-        alpha_ewma=ALPHA_EWMA,
-        max_activos=MAX_ACTIVOS,
+        alpha_ewma=alpha_ewma,
+        max_activos=max_activos,
         guardar_pickle=False  # Se guardará en la carpeta de corrida
     )
     print(f"✅ Inputs generados para {len(inputs_modelo['set_acciones'])} activos")
@@ -83,4 +76,9 @@ def ejecutar_pipeline():
 
 
 if __name__ == "__main__":
-    ejecutar_pipeline()
+    nombre_corrida = "Corrida"
+    start_year = 2010
+    end_year = 2023
+    alpha_ewma = 0.94
+    max_activos = None  # None = todos
+    ejecutar_preprocesamiento(nombre_corrida, start_year, end_year, alpha_ewma, max_activos)

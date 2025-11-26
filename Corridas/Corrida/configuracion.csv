@@ -1,0 +1,2 @@
+nombre_corrida,start_year,end_year,alpha_ewma,max_activos,año_backtesting,ejecutar_preprocesamiento,estocastico,robust
+Corrida,2010,2023,0.94,,2024,False,"{'max_acciones': 10, 'w_minimo': 0.05, 'w_maximo': 0.3, 'rendimiento_minimo': 0.014888612493750559}","{'max_acciones': 10, 'w_minimo': 0.05, 'w_maximo': 0.3, 'rendimiento_minimo': -3}"

@@ -22,7 +22,9 @@ def descargar_sp500_mensual(start_year=2000, end_year=2015, guardar_csv=False):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     response = requests.get(url, headers=headers)
     response.raise_for_status()
-    tabla = pd.read_html(response.text)
+    
+    from io import StringIO
+    tabla = pd.read_html(StringIO(response.text))
     tickers = tabla[0]['Symbol'].to_list()
 
     # --- Rango temporal ---

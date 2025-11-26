@@ -34,10 +34,15 @@ def generar_reporte_excel(model, inputs_modelo, nombre_archivo='resultados.xlsx'
     for accion in model.ACCION:
         w = pyo.value(model.W[accion])
         if w > 1e-6:  # Solo pesos significativos
+            rendimiento_log = pyo.value(model.mu[accion])
+            # Convertir rendimiento logarítmico a porcentual: r_porcentual = exp(r_log) - 1
+            rendimiento_porcentual = np.exp(rendimiento_log) - 1
+            
             acciones_seleccionadas.append({
                 'Ticker': accion,
                 'Peso_W': w,
-                'Rendimiento_Esperado': pyo.value(model.mu[accion]),
+                'Rendimiento_Log': rendimiento_log,
+                'Rendimiento_Porcentual': rendimiento_porcentual,
                 'Desvio_Estandar': pyo.value(model.desvio[accion]),
                 'VaR_95': pyo.value(model.var[accion]),
                 'CVaR_95': pyo.value(model.cvar[accion]),
@@ -48,18 +53,20 @@ def generar_reporte_excel(model, inputs_modelo, nombre_archivo='resultados.xlsx'
     df_seleccionadas = df_seleccionadas.sort_values('Peso_W', ascending=False)
     
     # 2. Métricas del portafolio
-    rendimiento_total = pyo.value(model.RENDIMIENTO_PORTAFOLIO)
+    rendimiento_total_log = pyo.value(model.RENDIMIENTO_PORTAFOLIO)
+    rendimiento_total_porcentual = np.exp(rendimiento_total_log) - 1
     riesgo_total = pyo.value(model.RIESGO_PORTAFOLIO)
     volatilidad = np.sqrt(riesgo_total)
     costo_perdida = pyo.value(model.COSTO_PERDIDA)
     valor_objetivo = pyo.value(list(model.component_objects(pyo.Objective))[0])
     
-    # Sharpe ratio
-    exceso_rendimiento = rendimiento_total - model.tasa_libre_riesgo
+    # Sharpe ratio (usando rendimiento logarítmico)
+    exceso_rendimiento = rendimiento_total_log - model.tasa_libre_riesgo
     sharpe_ratio = exceso_rendimiento / volatilidad if volatilidad > 0 else 0
     
     df_metricas = pd.DataFrame([
-        {'Metrica': 'Rendimiento_Esperado', 'Valor': rendimiento_total},
+        {'Metrica': 'Rendimiento_Esperado_Log', 'Valor': rendimiento_total_log},
+        {'Metrica': 'Rendimiento_Esperado_Porcentual', 'Valor': rendimiento_total_porcentual},
         {'Metrica': 'Volatilidad', 'Valor': volatilidad},
         {'Metrica': 'Sharpe_Ratio', 'Valor': sharpe_ratio},
         {'Metrica': 'Riesgo_Varianza', 'Valor': riesgo_total},
@@ -87,9 +94,10 @@ def generar_reporte_excel(model, inputs_modelo, nombre_archivo='resultados.xlsx'
     print(f"✅ Reporte generado: {nombre_archivo}")
     print(f"\n📋 Resumen:")
     print(f"   • Acciones seleccionadas: {len(df_seleccionadas)}")
-    print(f"   • Rendimiento esperado:   {rendimiento_total:.4%}")
-    print(f"   • Volatilidad:            {volatilidad:.4%}")
-    print(f"   • Sharpe Ratio:           {sharpe_ratio:.4f}")
+    print(f"   • Rendimiento esperado (log):        {rendimiento_total_log:.4%}")
+    print(f"   • Rendimiento esperado (porcentual): {rendimiento_total_porcentual:.4%}")
+    print(f"   • Volatilidad:                       {volatilidad:.4%}")
+    print(f"   • Sharpe Ratio:                      {sharpe_ratio:.4f}")
     
     return nombre_archivo
 

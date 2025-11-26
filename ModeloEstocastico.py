@@ -6,9 +6,7 @@ from pyomo.common.timing import report_timing
 
 report_timing()
 
-def modelo_estocastico(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=0.3,
-                       w_renta_fija=0.2, tasa_mensual_renta_fija=0.08/12,
-                       rendimiento_minimo=np.log(0.015)):
+def modelo_estocastico(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=0.3, rendimiento_minimo=np.log(0.015)):
     """Ejecuta el modelo estocástico con los parámetros dados."""
 
     # Lectura de datos
@@ -32,8 +30,8 @@ def modelo_estocastico(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=
     model.max_acciones = max_acciones
     model.w_minimo = w_minimo
     model.w_maximo = w_maximo
-    model.w_renta_fija = w_renta_fija
-    model.rendimiento_renta_fija = tasa_mensual_renta_fija
+    # model.w_renta_fija = w_renta_fija
+    # model.rendimiento_renta_fija = tasa_mensual_renta_fija
     model.rendimiento_minimo_portafolio = rendimiento_minimo
     model.tasa_libre_riesgo = 0.04 / 12
 
@@ -84,7 +82,7 @@ def modelo_estocastico(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=
 
     @model.Objective(sense=pyo.minimize)
     def minimizar_riesgo(model):
-        return model.RIESGO_PORTAFOLIO - model.COSTO_PERDIDA + 0.1 * sum((1- model.ACTIVAR_ACCION[i]) * model.mu[i] for i in model.ACCION)
+        return model.RIESGO_PORTAFOLIO + 0.5 * model.COSTO_PERDIDA + 0.01 * sum((1- model.ACTIVAR_ACCION[i]) * model.mu[i] for i in model.ACCION)
 
     opt = pyo.SolverFactory('gurobi')
     opt.options['TimeLimit'] = 1000
@@ -99,22 +97,20 @@ def modelo_estocastico(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=
     import os
 
     # Generar reporte en la carpeta de la corrida
-    ruta_reporte = os.path.join(f'Corridas/{nombre_corrida}', 'resultados.xlsx')
+    ruta_reporte = os.path.join(f'Corridas/{nombre_corrida}', 'resultados_estocastico.xlsx')
     generar_reporte_excel(model, inputs_modelo, ruta_reporte)
 
     print(f"\n✅ Modelo resuelto y reporte generado en: Corridas/{nombre_corrida}/")
 
 
 if __name__ == "__main__":
-    nombre_corrida = "20241010_123456_analisis_sp500"  # Cambiar según la corrida deseada
+    nombre_corrida = "20251025_150353_analisis_sp500"  # Cambiar según la corrida deseada
     
     max_acciones = 10
     w_minimo = 0.05
     w_maximo = 0.3
-    w_renta_fija = 0.2
-    tasa_mensual_renta_fija = 0.08/12
+    # w_renta_fija = 0.2
+    # tasa_mensual_renta_fija = 0.08/12
     rendimiento_minimo = np.log(0.015)
     
-    modelo_estocastico(nombre_corrida, max_acciones, w_minimo, w_maximo,
-                       w_renta_fija, tasa_mensual_renta_fija,
-                       rendimiento_minimo)
+    modelo_estocastico(nombre_corrida, max_acciones, w_minimo, w_maximo, rendimiento_minimo)
