@@ -25,14 +25,14 @@ def generar_inputs_modelo(df_datos, alpha_ewma=0.94, max_activos=None,
     Genera diccionario de inputs para el modelo estocástico.
     
     Parámetros:
-        df_datos : DataFrame con columnas ['Date', 'Ticker', 'Close']
-        alpha_ewma : float, parámetro EWMA (default 0.94)
+        df_datos : DataFrame con columnas ['Date', 'Ticker', 'Close'] y opcionalmente 'Return'
+        alpha_ewma : float, parámetro EWMA (default 0.94) - DEPRECADO, ahora usa método simple
         max_activos : int, límite de activos a procesar (None = todos)
         guardar_pickle : bool, si True guarda el diccionario en pickle
         nombre_archivo : str, nombre del archivo pickle
     
     Retorna:
-        dict con estructura compatible con ModeloEstocastico.py:
+        dict con estructura compatible con ModeloEstocastico.py y Pipeline_Franco:
             - set_acciones: list de tickers
             - rendimiento_esperado: dict {ticker: mu}
             - desvio_estandar: dict {ticker: sigma}
@@ -41,80 +41,117 @@ def generar_inputs_modelo(df_datos, alpha_ewma=0.94, max_activos=None,
             - var: dict {ticker: VaR al 95%}
             - cvar: dict {ticker: CVaR al 95%}
             - metadata: dict con información de la corrida
+    
+    Nota: Ahora utiliza el método de Pipeline_Franco (media simple + momentum)
+          en lugar de EWMA para compatibilidad con OptimizarCartera.py
     """
     
     print("\n📊 Generando inputs para modelo estocástico...")
     
-    # 1. Calcular rendimientos y covarianzas EWMA
-    print("   Calculando EWMA...")
-    mu_pred, cov_ewma = proyectar_rendimientos(df_datos, alpha=alpha_ewma)
+    # 1. NUEVO: Calcular rendimientos esperados como en DinamicMVO de Franco
+    print("   Calculando rendimientos esperados (método Franco)...")
     
-    # 2. Seleccionar activos
-    tickers = mu_pred.index.tolist()
+    # Verificar si ya tiene columna Return (como en descargar_tickets.py)
+    if 'Return' not in df_datos.columns:
+        # Si no tiene, calcular rendimientos logarítmicos
+        df_datos = df_datos.copy()
+        df_datos['Date'] = pd.to_datetime(df_datos['Date'])
+        df_datos = df_datos.sort_values(['Ticker', 'Date'])
+        df_datos['Return'] = df_datos.groupby('Ticker')['Close'].transform(lambda x: np.log(x / x.shift(1)))
+        df_datos = df_datos.dropna(subset=['Return'])
+    
+    # Calcular μ = 0.5*media + 0.5*momentum (últimos 3 meses)
+    mean_return = df_datos.groupby('Ticker')['Return'].mean()
+    momentum = df_datos.groupby('Ticker').apply(lambda x: x.sort_values('Date').tail(3)['Return'].mean())
+    mu_pred = 0.5 * mean_return + 0.5 * momentum
+    
+    # Rellenar NaN con mediana si existen
+    if mu_pred.isna().any():
+        mu_pred = mu_pred.fillna(mu_pred.median())
+    
+    # Calcular matriz de covarianzas (método simple, no EWMA)
+    print("   Calculando matriz de covarianzas...")
+    pivot_returns = df_datos.pivot(index='Date', columns='Ticker', values='Return')
+    cov_matrix = pivot_returns.cov()
+    
+    # 2. Seleccionar activos (por mayor rendimiento esperado)
+    mu_pred_sorted = mu_pred.sort_values(ascending=False)
+    tickers = mu_pred_sorted.index.tolist()
+    
     if max_activos:
         tickers = tickers[:max_activos]
         mu_pred = mu_pred.loc[tickers]
-        cov_ewma = cov_ewma.loc[tickers, tickers]
+        cov_matrix = cov_matrix.loc[tickers, tickers]
     
     print(f"   Procesando {len(tickers)} activos...")
     
     # 3. Calcular volatilidades (desviaciones estándar)
-    desvio_estandar = {ticker: np.sqrt(cov_ewma.loc[ticker, ticker]) for ticker in tickers}
+    desvio_estandar = {ticker: np.sqrt(cov_matrix.loc[ticker, ticker]) for ticker in tickers}
+    sigma_array = np.array([desvio_estandar[t] for t in tickers])
     
-    # 4. Analizar distribuciones y calcular métricas de riesgo
+    # 4. Calcular delta (incertidumbre) como en Pipeline_Franco
+    print("   Calculando intervalos de incertidumbre (delta)...")
+    T = len(df_datos['Date'].unique())  # Número de períodos
+    delta_array = 1.96 * sigma_array / np.sqrt(T)  # Intervalo de confianza 95%
+    delta_dict = {ticker: delta_array[i] for i, ticker in enumerate(tickers)}
+    
+    # 5. Métricas de riesgo simplificadas (método empírico rápido)
+    print("   Calculando métricas de riesgo...")
     probabilidad_perdida = {}
     var_dict = {}
     cvar_dict = {}
     
-    errores = []
-    for i, ticker in enumerate(tickers, 1):
-        print(f"   [{i}/{len(tickers)}] {ticker}...", end='\r')
-        try:
-            resultado = ajustar_distribucion_accion(
-                df_datos, 
-                ticker, 
-                verbose=False,
-                umbral_ajuste=0.05,
-                nivel_confianza=0.95
-            )
-            probabilidad_perdida[ticker] = resultado['prob_rendimiento_negativo']
-            var_dict[ticker] = resultado['var']
-            cvar_dict[ticker] = resultado['cvar']
-        except Exception as e:
-            errores.append(ticker)
-            # Valores por defecto si falla el análisis
-            probabilidad_perdida[ticker] = 0.5
+    for ticker in tickers:
+        ticker_returns = df_datos[df_datos['Ticker'] == ticker]['Return'].dropna()
+        
+        # Probabilidad empírica de rendimiento negativo
+        prob_neg = (ticker_returns < 0).sum() / len(ticker_returns) if len(ticker_returns) > 0 else 0.5
+        probabilidad_perdida[ticker] = prob_neg
+        
+        # VaR y CVaR al 95% (percentiles empíricos)
+        if len(ticker_returns) > 0:
+            var_dict[ticker] = ticker_returns.quantile(0.05)  # 5th percentile
+            # CVaR = media de retornos peores que VaR
+            returns_below_var = ticker_returns[ticker_returns <= var_dict[ticker]]
+            cvar_dict[ticker] = returns_below_var.mean() if len(returns_below_var) > 0 else var_dict[ticker]
+        else:
             var_dict[ticker] = -2 * desvio_estandar[ticker]
             cvar_dict[ticker] = -3 * desvio_estandar[ticker]
     
-    print(f"\n   ✅ Análisis completado ({len(errores)} errores)")
+    print(f"   ✅ Análisis completado (método empírico rápido)")
     
-    # 5. Convertir matriz de covarianzas a diccionario
-    covarianzas = {(i, j): cov_ewma.loc[i, j] 
+    # 6. Convertir matriz de covarianzas a diccionario
+    covarianzas = {(i, j): cov_matrix.loc[i, j] 
                    for i in tickers for j in tickers}
     
-    # 6. Construir diccionario de inputs (nombres compatibles con ModeloEstocastico.py)
+    # 7. Construir diccionario de inputs (compatible con ModeloEstocastico.py Y Pipeline_Franco)
     inputs_modelo = {
         'set_acciones': tickers,
         'rendimiento_esperado': mu_pred.to_dict(),
         'desvio_estandar': desvio_estandar,
+        'delta': delta_dict,  # NUEVO: Intervalo de incertidumbre para Robust Optimization
         'covarianzas': covarianzas,
         'probabilidad_perdida': probabilidad_perdida,
         'var': var_dict,
         'cvar': cvar_dict,
         'metadata': {
             'n_activos': len(tickers),
-            'alpha_ewma': alpha_ewma,
-            'activos_con_error': errores,
+            'metodo': 'simple_momentum',  # Cambio de EWMA a método simple+momentum
+            'T_periodos': T,
             'fecha_generacion': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
         }
     }
     
-    # 7. Guardar pickle si se solicita
+    # 8. Guardar pickle si se solicita
     if guardar_pickle:
         with open(nombre_archivo, 'wb') as f:
             pickle.dump(inputs_modelo, f)
         print(f"   💾 Archivo guardado: {nombre_archivo}")
+    
+    print(f"   ✅ Inputs generados exitosamente")
+    print(f"      • Tickers: {len(tickers)}")
+    print(f"      • μ rango: [{mu_pred.min():.6f}, {mu_pred.max():.6f}]")
+    print(f"      • σ rango: [{min(desvio_estandar.values()):.6f}, {max(desvio_estandar.values()):.6f}]")
     
     return inputs_modelo
 
@@ -156,9 +193,9 @@ def resumen_inputs(inputs_modelo):
     meta = inputs_modelo['metadata']
     print(f"\n📊 Información General:")
     print(f"   • Número de activos:  {meta['n_activos']}")
-    print(f"   • Alpha EWMA:         {meta['alpha_ewma']}")
+    print(f"   • Método:             {meta['metodo']}")
+    print(f"   • Períodos (T):       {meta['T_periodos']}")
     print(f"   • Fecha generación:   {meta['fecha_generacion']}")
-    print(f"   • Errores:            {len(meta['activos_con_error'])}")
     
     # Estadísticas de rendimientos
     mu_vals = list(inputs_modelo['rendimiento_esperado'].values())
