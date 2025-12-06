@@ -5,12 +5,12 @@ from pyomo.common.timing import report_timing
 
 report_timing()
 
-def modelo_robust_optimization(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=0.3, rendimiento_minimo=np.log(0.015)):
+def modelo_robust_optimization(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=0.3, rendimiento_minimo=np.log(0.01)):
     """Ejecuta el modelo robust optimization con los parámetros dados."""
 
     # Lectura de datos
     with open(f'Corridas/{nombre_corrida}/inputs_modelo.pkl', 'rb') as f:
-        inputs_modelo = pickle.load(f)
+       inputs_modelo = pickle.load(f)
 
     model = pyo.ConcreteModel()
 
@@ -66,9 +66,9 @@ def modelo_robust_optimization(nombre_corrida, max_acciones=10, w_minimo=0.05, w
     def restriccion_riesgo_portafolio(model):
         return model.RIESGO_PORTAFOLIO == sum(model.W[i] * model.W[j] * model.cov[i, j] for i in model.ACCION for j in model.ACCION)
 
-    @model.Constraint()
-    def restriccion_rendimiento_minimo(model):
-        return sum((model.mu[i] - model.z * model.desvio[i]) * model.W[i] for i in model.ACCION) >= model.rendimiento_minimo_portafolio
+    # @model.Constraint()
+    # def restriccion_rendimiento_minimo(model):
+    #     return sum((model.mu[i] - model.z * model.desvio[i]) * model.W[i] for i in model.ACCION) >= model.rendimiento_minimo_portafolio
 
     @model.Constraint()
     def definicion_costo_perdida(model):

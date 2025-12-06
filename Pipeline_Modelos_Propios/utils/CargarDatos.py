@@ -23,7 +23,21 @@ def descargar_sp500_mensual(start_year=2015, end_year=2025, guardar_csv=False):
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     tabla = pd.read_html(response.text)
-    tickers = tabla[1]['Symbol'].to_list()
+    # La primera tabla (índice 0) contiene los componentes del S&P 500
+    # Las columnas pueden variar, buscar 'Symbol' o equivalente
+    df_sp500 = tabla[0]
+    
+    # Intentar encontrar la columna correcta (puede ser 'Symbol', 'Ticker', etc.)
+    symbol_column = None
+    for col in df_sp500.columns:
+        if 'symbol' in col.lower() or col == 'Symbol':
+            symbol_column = col
+            break
+    
+    if symbol_column is None:
+        raise ValueError(f"No se encontró columna 'Symbol' en la tabla. Columnas disponibles: {df_sp500.columns.tolist()}")
+    
+    tickers = df_sp500[symbol_column].tolist()
 
     # --- Rango temporal ---
     start_date = f"{start_year}-01-01"
@@ -576,12 +590,8 @@ if __name__ == "__main__":
     
     
 def descargar_spy(start_year=2015, end_year=2025):
-    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    tabla = pd.read_html(response.text)
-    tickers = tabla[1]['Symbol'].to_list()
+    # No necesitamos descargar la lista del S&P 500 para SPY
+    # SPY es un ETF que ya sabemos su ticker
 
     # --- Rango temporal ---
     start_date = f"{start_year}-01-01"

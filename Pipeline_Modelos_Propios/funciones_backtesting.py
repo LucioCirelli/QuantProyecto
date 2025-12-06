@@ -1,14 +1,12 @@
 """
 FUNCIONES_BACKTESTING.PY - Lógica completa de backtesting
 
-Contiene TODA la lógica de Franco (DinamicMVO.ipynb):
 - Rebalanceo mensual con ventana móvil
 - Cálculo de inputs (mu, Sigma, delta)
 - Ejecución de modelos
 - Cálculo de métricas
-- Generación de gráficos IDÉNTICOS a Franco
+- Generación de gráficos
 
-TODO EN UN SOLO ARCHIVO PARA SIMPLICIDAD.
 """
 
 import pandas as pd
@@ -33,84 +31,53 @@ def get_modelo_wrapper(nombre_modelo, parametros):
         wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None) -> dict de pesos
     """
     
-    if nombre_modelo == 'estocastico':
+    if nombre_modelo == 'minimizador_riesgo':
         def wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None):
-            from ModeloEstocastico import modelo_estocastico
-            import pickle
-            import os
             
-            # Preparar inputs
-            inputs_modelo = {
-                'set_acciones': list(mu_dict.keys()),
-                'rendimiento_esperado': mu_dict,
-                'desvio_estandar': {k: np.sqrt(Sigma_dict.get((k, k), 0)) for k in mu_dict.keys()},
-                'covarianzas': Sigma_dict,
-                'delta': delta_dict,
-                'var': {k: -0.08 for k in mu_dict.keys()},
-                'cvar': {k: -0.12 for k in mu_dict.keys()},
-                'probabilidad_perdida': {k: 0.45 for k in mu_dict.keys()}
-            }
-            
-            os.makedirs('Corridas/temp', exist_ok=True)
-            with open('Corridas/temp/inputs_modelo.pkl', 'wb') as f:
-                pickle.dump(inputs_modelo, f)
-            
-            model = modelo_estocastico(
+            # Modo dinámico: usar modelo con turnover
+            from Pipeline_Modelos_Propios.ModeloMinimizadorRiesgo import modelo_minimizador_riesgo
+                
+            # Si no existe la versión custom, usar la original
+            try:
+                return modelo_minimizador_riesgo(
                 nombre_corrida='temp',
                 max_acciones=parametros.get('max_acciones', 10),
                 w_minimo=parametros.get('w_minimo', 0.05),
                 w_maximo=parametros.get('w_maximo', 0.3),
-                rendimiento_minimo=parametros.get('rendimiento_minimo', np.log(1.015))
+                rendimiento_minimo=parametros.get('rendimiento_minimo', np.log(0.015))
             )
-            
-            pesos = {i: model.W[i].value for i in model.ACCION if model.W[i].value > 1e-6}
-            return pesos
+            except (Exception):
+                return {}
         
         return wrapper
     
-    elif nombre_modelo == 'robust':
+    elif nombre_modelo == 'maximizador_beneficio':
         def wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None):
-            from ModeloRobustOptimization import modelo_robust_optimization
-            import pickle
-            import os
             
-            inputs_modelo = {
-                'set_acciones': list(mu_dict.keys()),
-                'rendimiento_esperado': mu_dict,
-                'desvio_estandar': {k: np.sqrt(Sigma_dict.get((k, k), 0)) for k in mu_dict.keys()},
-                'covarianzas': Sigma_dict,
-                'delta': delta_dict,
-                'var': {k: -0.08 for k in mu_dict.keys()},
-                'cvar': {k: -0.12 for k in mu_dict.keys()},
-                'probabilidad_perdida': {k: 0.45 for k in mu_dict.keys()}
-            }
-            
-            os.makedirs('Corridas/temp', exist_ok=True)
-            with open('Corridas/temp/inputs_modelo.pkl', 'wb') as f:
-                pickle.dump(inputs_modelo, f)
-            
-            model = modelo_robust_optimization(
-                nombre_corrida='temp',
-                max_acciones=parametros.get('max_acciones', 10),
-                w_minimo=parametros.get('w_minimo', 0.05),
-                w_maximo=parametros.get('w_maximo', 0.3),
-                rendimiento_minimo=parametros.get('rendimiento_minimo', np.log(1.015))
-            )
-            
-            pesos = {i: model.W[i].value for i in model.ACCION if model.W[i].value > 1e-6}
-            return pesos
+            # Modo dinámico: usar modelo con turnover
+            from Pipeline_Modelos_Propios.ModeloMaximizadorBeneficio import modelo_maximizador_beneficio
+                
+            # Si no existe la versión custom, usar la original
+            try:
+                return modelo_maximizador_beneficio(
+                    nombre_corrida='temp',
+                    max_acciones=parametros.get('max_acciones', 10),
+                    w_minimo=parametros.get('w_minimo', 0.05),
+                    w_maximo=parametros.get('w_maximo', 0.3),
+                    rendimiento_minimo=parametros.get('rendimiento_minimo', np.log(1.015))
+                )
+                
+            except Exception:
+                return {}
         
         return wrapper
     
-    elif nombre_modelo == 'franco':
+    elif nombre_modelo == 'mvo':
         def wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None):
-            import sys
-            import os
-            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'Pipeline_Franco'))
             
             if pesos_anteriores is not None:
                 # Modo dinámico: usar modelo con turnover
-                from Pipeline_Franco.OptimizarCarteraDinamico import minimizar_riesgo_dinamico_custom
+                from Pipeline_Modelos_Propios.OptimizarCarteraDinamico import minimizar_riesgo_dinamico_custom
                 
                 # Si no existe la versión custom, usar la original
                 try:
@@ -128,7 +95,7 @@ def get_modelo_wrapper(nombre_modelo, parametros):
                     )
                 except (ImportError, TypeError):
                     # Fallback a versión original
-                    from Pipeline_Franco.OptimizarCarteraDinamico import minimizar_riesgo_dinamico
+                    from Pipeline_Modelos_Propios.OptimizarCarteraDinamico import minimizar_riesgo_dinamico
                     return minimizar_riesgo_dinamico(
                         mu_dict, Sigma_dict, delta_dict,
                         w_actual=pesos_anteriores,
@@ -136,7 +103,7 @@ def get_modelo_wrapper(nombre_modelo, parametros):
                     )
             else:
                 # Modo estático: primer rebalanceo
-                from Pipeline_Franco.OptimizarCartera import minimizar_riesgo_custom
+                from Pipeline_Modelos_Propios.OptimizarCartera import minimizar_riesgo_custom
                 
                 try:
                     return minimizar_riesgo_custom(
@@ -151,7 +118,7 @@ def get_modelo_wrapper(nombre_modelo, parametros):
                     )
                 except (ImportError, TypeError):
                     # Fallback a versión original
-                    from Pipeline_Franco.OptimizarCartera import minimizar_riesgo
+                    from Pipeline_Modelos_Propios.OptimizarCartera import minimizar_riesgo
                     return minimizar_riesgo(
                         mu_dict, Sigma_dict, delta_dict,
                         aversion=parametros.get('aversion_riesgo', 2)
@@ -164,18 +131,19 @@ def get_modelo_wrapper(nombre_modelo, parametros):
 
 
 # ============================================================================
-# BACKTESTING COMPLETO (LÓGICA DE FRANCO)
+# BACKTESTING COMPLETO
 # ============================================================================
 
 def ejecutar_backtesting_completo(df_tickers, df_spy, nombre_modelo, parametros, 
-                                  start_date, window_meses=100, rebalance_freq=1,
+                                  start_date, end_date=None, window_meses=100, rebalance_freq=1,
                                   parametros_preprocesamiento=None):
     """
     Ejecuta backtesting completo con rebalanceo mensual.
     
-    ESTA ES LA FUNCIÓN CORE - Implementa EXACTAMENTE la lógica de Franco.
-    
     Args:
+        start_date: Fecha de inicio del backtesting
+        end_date: Fecha de fin del backtesting (None = hasta el final de los datos)
+        window_meses: Ventana histórica en meses para calcular inputs
         parametros_preprocesamiento: dict con peso_media, peso_momentum, meses_momentum, nivel_confianza
     """
     
@@ -188,8 +156,8 @@ def ejecutar_backtesting_completo(df_tickers, df_spy, nombre_modelo, parametros,
             'nivel_confianza': 1.96
         }
     
-    # Obtener wrapper del modelo
-    funcion_modelo = get_modelo_wrapper(nombre_modelo, parametros)
+    # Obtener wrapper del modelo (retorna diccionario de pesos)
+    wrapper_modelo = get_modelo_wrapper(nombre_modelo, parametros)
     
     # Preparar datos
     df_tickers = df_tickers.copy()
@@ -200,12 +168,16 @@ def ejecutar_backtesting_completo(df_tickers, df_spy, nombre_modelo, parametros,
     df_spy = df_spy.sort_values(['Ticker', 'Date'])
     
     start_date = pd.Timestamp(start_date)
+    end_date = pd.Timestamp(end_date) if end_date else None
     
     # Obtener fechas de rebalanceo
     all_dates = sorted(df_tickers['Date'].unique())
     dates = []
     current_date = None
     for d in all_dates:
+        # Aplicar filtro de fecha de fin si existe
+        if end_date and d > end_date:
+            break
         if d >= start_date:
             if current_date is None:
                 dates.append(d)
@@ -226,7 +198,7 @@ def ejecutar_backtesting_completo(df_tickers, df_spy, nombre_modelo, parametros,
     portfolio_weights = []
     pesos_anteriores = None
     
-    # LOOP DE REBALANCEO (IGUAL QUE FRANCO)
+    # LOOP DE REBALANCEO
     for idx, d in enumerate(dates):
         print(f"[{idx+1}/{len(dates)}] {d.date()}", end=" ")
         
@@ -280,10 +252,17 @@ def ejecutar_backtesting_completo(df_tickers, df_spy, nombre_modelo, parametros,
         Sigma_dict = Sigma.stack().to_dict()
         delta_dict = pd.Series(delta, index=Sigma.index).to_dict()
         
-        # Ejecutar modelo
+        # Ejecutar modelo (wrapper retorna dict de pesos)
         try:
-            w_opt = funcion_modelo(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=pesos_anteriores)
-            w_opt = pd.Series(w_opt).reindex(Sigma.columns).fillna(0)
+            pesos = wrapper_modelo(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=pesos_anteriores)
+            
+            # # Validar que se obtuvieron pesos
+            # if not pesos or all(v == 0 for v in pesos.values()):
+            #     raise ValueError("Modelo no retornó pesos válidos")
+            print(pesos)
+            
+            # Convertir dict de pesos a Series para operar con pandas
+            w_opt = pd.Series(pesos).reindex(Sigma.columns).fillna(0)
             pesos_anteriores = w_opt.copy()
             
             weights_dict = {'Date': d}
@@ -294,7 +273,9 @@ def ejecutar_backtesting_completo(df_tickers, df_spy, nombre_modelo, parametros,
         except Exception as e:
             print(f"✗ Error: {e}")
             if pesos_anteriores is None:
+                print(" (saltando período)")
                 continue
+            print(" (usando pesos anteriores)")
             w_opt = pesos_anteriores.copy()
         
         # Calcular retornos
@@ -354,11 +335,11 @@ def ejecutar_backtesting_completo(df_tickers, df_spy, nombre_modelo, parametros,
 
 
 # ============================================================================
-# CÁLCULO DE MÉTRICAS (FRANCO)
+# CÁLCULO DE MÉTRICAS
 # ============================================================================
 
 def calcular_metricas(df_plot, rebalance_freq=1):
-    """Calcula todas las métricas (idéntico a Franco)"""
+    """Calcula todas las métricas"""
     
     start_date = df_plot['Date'].iloc[0]
     end_date = df_plot['Date'].iloc[-1]
@@ -426,44 +407,159 @@ def calcular_metricas(df_plot, rebalance_freq=1):
 
 
 # ============================================================================
-# VISUALIZACIÓN (GRÁFICOS DE FRANCO)
+# VISUALIZACIÓN
 # ============================================================================
 
 def mostrar_resultados_comparativos(resultados_todos):
     """
-    Muestra resultados comparativos de TODOS los modelos ejecutados.
+    Muestra resultados comparativos de los modelos ejecutados.
     
-    Genera los gráficos IDÉNTICOS a Franco para cada modelo.
+    Si hay múltiples modelos (2 o 3), primero muestra panel comparativo.
+    Luego muestra detalles individuales para cada modelo.
     """
     
+    # ========================================================================
+    # TABLA COMPARATIVA (solo si hay 2+ modelos)
+    # ========================================================================
+    if len(resultados_todos) > 1:
+        st.markdown("# 📊 Comparación entre Modelos")
+        st.markdown("### Tabla Comparativa de Métricas")
+        tabla_comp = generar_tabla_comparativa(resultados_todos)
+        st.dataframe(tabla_comp, use_container_width=True)
+        st.markdown("---")
+    
+    # ========================================================================
+    # GRÁFICOS INDIVIDUALES
+    # ========================================================================
     for resultado_dict in resultados_todos:
         nombre = resultado_dict['nombre']
         resultado = resultado_dict['resultado']
         
         st.markdown(f"## 📊 {nombre}")
-        
-        # Generar gráfico de Franco
-        fig = generar_grafico_franco(resultado['df_plot'], nombre, resultado['metricas'])
-        st.pyplot(fig)
-        
-        # Tabla de métricas
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Retorno Total", f"{resultado['metricas']['total_return_port']*100:.2f}%")
-            st.metric("Retorno Anualizado", f"{resultado['metricas']['ann_return_port']*100:.2f}%")
-        with col2:
-            st.metric("Volatilidad Anual", f"{resultado['metricas']['ann_vol_port']*100:.2f}%")
-            st.metric("Sharpe Ratio", f"{resultado['metricas']['ann_sharpe_port']:.3f}")
-        with col3:
-            st.metric("Max Drawdown", f"{resultado['metricas']['max_dd_port']*100:.2f}%")
-            st.metric("Win Rate", f"{resultado['metricas']['win_rate']*100:.1f}%")
-        
+        _mostrar_detalle_modelo(nombre, resultado)
         st.markdown("---")
 
 
-def generar_grafico_franco(df_plot, titulo_modelo, metricas):
+def _mostrar_detalle_modelo(nombre, resultado):
+    """Muestra el detalle completo de un modelo individual."""
+    
+    # Generar gráfico de 6 paneles
+    fig = generar_grafico_general(resultado['df_plot'], nombre, resultado['metricas'])
+    st.pyplot(fig)
+    
+    # Tabla de métricas en 3 columnas
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Retorno Total", f"{resultado['metricas']['total_return_port']*100:.2f}%")
+        st.metric("Retorno Anualizado", f"{resultado['metricas']['ann_return_port']*100:.2f}%")
+    with col2:
+        st.metric("Volatilidad Anual", f"{resultado['metricas']['ann_vol_port']*100:.2f}%")
+        st.metric("Sharpe Ratio", f"{resultado['metricas']['ann_sharpe_port']:.3f}")
+    with col3:
+        st.metric("Max Drawdown", f"{resultado['metricas']['max_dd_port']*100:.2f}%")
+        st.metric("Win Rate", f"{resultado['metricas']['win_rate']*100:.1f}%")
+    
+    # Tabla de acciones seleccionadas por período
+    st.markdown("---")
+    st.markdown("### 📋 Acciones Seleccionadas por Período de Rebalanceo")
+    
+    df_weights = generar_tabla_acciones(resultado['portfolio_weights'])
+    st.dataframe(df_weights, use_container_width=True, height=400)
+
+
+def generar_tabla_acciones(portfolio_weights):
     """
-    Genera el gráfico de 6 paneles IDÉNTICO a Franco.
+    Genera tabla con las acciones seleccionadas en cada período.
+    
+    Args:
+        portfolio_weights: Lista de dicts con Date y pesos por acción
+        
+    Returns:
+        pd.DataFrame con fechas en filas y acciones con sus pesos
+    """
+    if not portfolio_weights:
+        return pd.DataFrame()
+    
+    # Convertir a DataFrame
+    df_weights = pd.DataFrame(portfolio_weights)
+    
+    # Fecha como índice
+    df_weights['Date'] = pd.to_datetime(df_weights['Date'])
+    df_weights = df_weights.set_index('Date')
+    
+    # Ordenar por fecha
+    df_weights = df_weights.sort_index()
+    
+    # Formatear: mostrar solo acciones con peso > 0, ordenadas por peso
+    df_display = pd.DataFrame()
+    
+    for fecha in df_weights.index:
+        row = df_weights.loc[fecha]
+        # Filtrar acciones con peso > 0
+        activos = {ticker: peso for ticker, peso in row.items() if peso > 1e-6}
+        # Ordenar por peso descendente
+        activos_ordenados = dict(sorted(activos.items(), key=lambda x: x[1], reverse=True))
+        
+        # Crear string con formato "TICKER (XX.X%)"
+        acciones_str = ", ".join([f"{ticker} ({peso*100:.1f}%)" for ticker, peso in activos_ordenados.items()])
+        num_acciones = len(activos_ordenados)
+        
+        df_display = pd.concat([df_display, pd.DataFrame({
+            'Fecha': [fecha.strftime('%Y-%m-%d')],
+            '# Acciones': [num_acciones],
+            'Acciones Seleccionadas (Peso)': [acciones_str]
+        })], ignore_index=True)
+    
+    return df_display
+
+
+def generar_tabla_comparativa(resultados_todos):
+    """
+    Tabla comparativa con métricas de todos los modelos en columnas.
+    
+    Args:
+        resultados_todos: Lista de dicts con keys: 'nombre', 'resultado'
+    
+    Returns:
+        pd.DataFrame con métricas en filas, modelos en columnas
+    """
+    
+    data = {}
+    
+    # Recolectar métricas de cada modelo
+    for resultado_dict in resultados_todos:
+        nombre = resultado_dict['nombre']
+        metricas = resultado_dict['resultado']['metricas']
+        
+        data[nombre] = {
+            'Retorno Total (%)': f"{metricas['total_return_port']*100:.2f}",
+            'Retorno Anualizado (%)': f"{metricas['ann_return_port']*100:.2f}",
+            'Volatilidad Anual (%)': f"{metricas['ann_vol_port']*100:.2f}",
+            'Sharpe Ratio': f"{metricas['ann_sharpe_port']:.3f}",
+            'Max Drawdown (%)': f"{metricas['max_dd_port']*100:.2f}",
+            'Win Rate (%)': f"{metricas['win_rate']*100:.1f}"
+        }
+    
+    # Agregar columna de Benchmark
+    metricas_bench = resultados_todos[0]['resultado']['metricas']  # Todos tienen mismo benchmark
+    data['Benchmark'] = {
+        'Retorno Total (%)': f"{metricas_bench['total_return_bench']*100:.2f}",
+        'Retorno Anualizado (%)': f"{metricas_bench['ann_return_bench']*100:.2f}",
+        'Volatilidad Anual (%)': f"{metricas_bench['ann_vol_bench']*100:.2f}",
+        'Sharpe Ratio': f"{metricas_bench['ann_sharpe_bench']:.3f}",
+        'Max Drawdown (%)': f"{metricas_bench['max_dd_bench']*100:.2f}",
+        'Win Rate (%)': "N/A"  # Benchmark no tiene win rate
+    }
+    
+    # Crear DataFrame
+    df_comp = pd.DataFrame(data)
+    
+    return df_comp
+
+
+def generar_grafico_general(df_plot, titulo_modelo, metricas):
+    """
+    Genera el gráfico de 6 paneles.
     """
     
     fig = plt.figure(figsize=(16, 12))
@@ -472,9 +568,9 @@ def generar_grafico_franco(df_plot, titulo_modelo, metricas):
     # 1. Retornos Acumulados
     ax1 = fig.add_subplot(gs[0, :])
     ax1.plot(df_plot['Date'], df_plot['Cum_Portfolio_Pct'] * 100, 
-             label='Portfolio', linewidth=2.5, color='#2E86AB')
+             label='Portfolio Optimizado', linewidth=2.5, color='#2E86AB')
     ax1.plot(df_plot['Date'], df_plot['Cum_Benchmark_Pct'] * 100, 
-             label='SPY', linewidth=2.5, color='#A23B72', linestyle='--')
+             label='Benchmark (SPY)', linewidth=2.5, color='#A23B72', linestyle='--')
     ax1.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.3)
     ax1.fill_between(df_plot['Date'], df_plot['Cum_Portfolio_Pct'] * 100, 
                       df_plot['Cum_Benchmark_Pct'] * 100, 
@@ -485,36 +581,60 @@ def generar_grafico_franco(df_plot, titulo_modelo, metricas):
                       where=(df_plot['Cum_Portfolio_Pct'] < df_plot['Cum_Benchmark_Pct']),
                       alpha=0.3, color='red', label='Underperformance')
     ax1.set_ylabel('Retorno Acumulado (%)', fontsize=11)
-    ax1.set_title(f'Desempeño - {titulo_modelo}', fontsize=13, fontweight='bold')
+    ax1.set_title(f'Desempeño del Portfolio - {titulo_modelo}', fontsize=13, fontweight='bold')
     ax1.legend(fontsize=10, loc='upper left')
     ax1.grid(True, alpha=0.3)
+    ax1.tick_params(axis='x', rotation=45)
     
     # 2. Drawdown
     ax2 = fig.add_subplot(gs[1, 0])
     cumulative_wealth_port = 1 + df_plot['Cum_Portfolio_Pct']
     running_max_port = cumulative_wealth_port.expanding().max()
     drawdown_port = (cumulative_wealth_port - running_max_port) / running_max_port * 100
-    ax2.fill_between(df_plot['Date'], 0, drawdown_port, alpha=0.5, color='#2E86AB')
-    ax2.axhline(y=metricas['max_dd_port'] * 100, color='red', linestyle='--', linewidth=1)
+    
+    cumulative_wealth_bench = 1 + df_plot['Cum_Benchmark_Pct']
+    running_max_bench = cumulative_wealth_bench.expanding().max()
+    drawdown_bench = (cumulative_wealth_bench - running_max_bench) / running_max_bench * 100
+    
+    ax2.fill_between(df_plot['Date'], 0, drawdown_port, alpha=0.5, color='#2E86AB', label='Portfolio')
+    ax2.fill_between(df_plot['Date'], 0, drawdown_bench, alpha=0.3, color='#A23B72', label='Benchmark')
+    ax2.axhline(y=metricas['max_dd_port'] * 100, color='red', linestyle='--', linewidth=1, 
+                label=f'Max DD Port: {metricas["max_dd_port"]*100:.2f}%')
     ax2.set_ylabel('Drawdown (%)', fontsize=11)
-    ax2.set_title('Drawdown', fontsize=12, fontweight='bold')
+    ax2.set_xlabel('Fecha', fontsize=11)
+    ax2.set_title('Drawdown (Caída desde Máximo)', fontsize=12, fontweight='bold')
+    ax2.legend(fontsize=9)
     ax2.grid(True, alpha=0.3)
+    ax2.tick_params(axis='x', rotation=45)
     
-    # 3. Retornos por período
+    # 3. Retornos por Período
     ax3 = fig.add_subplot(gs[1, 1])
-    ax3.bar(df_plot['Date'], df_plot['Portfolio_Return'] * 100, alpha=0.7, color='#2E86AB', width=20)
+    ax3.bar(df_plot['Date'], df_plot['Portfolio_Return'] * 100, 
+            alpha=0.7, color='#2E86AB', label='Portfolio', width=20)
+    ax3.bar(df_plot['Date'], df_plot['Benchmark_Return'] * 100, 
+            alpha=0.5, color='#A23B72', label='Benchmark', width=20)
     ax3.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
-    ax3.set_ylabel('Retorno (%)', fontsize=11)
+    ax3.set_ylabel('Retorno por Período (%)', fontsize=11)
+    ax3.set_xlabel('Fecha', fontsize=11)
     ax3.set_title('Retornos Periódicos', fontsize=12, fontweight='bold')
+    ax3.legend(fontsize=9)
     ax3.grid(True, alpha=0.3, axis='y')
+    ax3.tick_params(axis='x', rotation=45)
     
-    # 4. Distribución
+    # 4. Distribución de Retornos
     ax4 = fig.add_subplot(gs[2, 0])
-    ax4.hist(df_plot['Portfolio_Return'] * 100, bins=15, alpha=0.7, color='#2E86AB', edgecolor='black')
-    ax4.axvline(df_plot['Portfolio_Return'].mean() * 100, color='red', linestyle='--', linewidth=2)
+    ax4.hist(df_plot['Portfolio_Return'] * 100, bins=15, alpha=0.7, 
+             color='#2E86AB', label='Portfolio', edgecolor='black')
+    ax4.hist(df_plot['Benchmark_Return'] * 100, bins=15, alpha=0.5, 
+             color='#A23B72', label='Benchmark', edgecolor='black')
+    ax4.axvline(df_plot['Portfolio_Return'].mean() * 100, color='#2E86AB', 
+                linestyle='--', linewidth=2, label='Media Port')
+    ax4.axvline(df_plot['Benchmark_Return'].mean() * 100, color='#A23B72', 
+                linestyle='--', linewidth=2, label='Media Bench')
     ax4.set_xlabel('Retorno (%)', fontsize=11)
     ax4.set_ylabel('Frecuencia', fontsize=11)
-    ax4.set_title('Distribución', fontsize=12, fontweight='bold')
+    ax4.set_title('Distribución de Retornos', fontsize=12, fontweight='bold')
+    ax4.legend(fontsize=9)
     ax4.grid(True, alpha=0.3, axis='y')
     
     # 5. Tabla de métricas

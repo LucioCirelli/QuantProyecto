@@ -1,3 +1,4 @@
+from cycler import V
 import pyomo.environ as pyo
 import pickle
 import numpy as np
@@ -5,8 +6,8 @@ from pyomo.common.timing import report_timing
 
 report_timing()
 
-def modelo_robust_optimization(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=0.3, rendimiento_minimo=np.log(0.015)):
-    """Ejecuta el modelo robust optimization con los parámetros dados."""
+def modelo_minimizador_riesgo(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=0.3, rendimiento_minimo=np.log(0.015)):
+    """Ejecuta el modelo minimizador de riesgo con los parámetros dados."""
 
     # Lectura de datos
     with open(f'Corridas/{nombre_corrida}/inputs_modelo.pkl', 'rb') as f:
@@ -22,16 +23,16 @@ def modelo_robust_optimization(nombre_corrida, max_acciones=10, w_minimo=0.05, w
     model.desvio = pyo.Param(model.ACCION, initialize=inputs_modelo['desvio_estandar'])
     model.cov = pyo.Param(model.ACCION, model.ACCION, initialize=inputs_modelo['covarianzas'])
     model.cvar = pyo.Param(model.ACCION,initialize=inputs_modelo['cvar'])
-    model.probabilidad_perdida = pyo.Param(model.ACCION,initialize=inputs_modelo['probabilidad_perdida']) # No se usa en este modelo, es para el postprocess
-    model.var = pyo.Param(model.ACCION,initialize=inputs_modelo['var']) # No se usa en este modelo, es para el postprocess
+    model.var = pyo.Param(model.ACCION,initialize=inputs_modelo['var'])
+    model.probabilidad_perdida = pyo.Param(model.ACCION,initialize=inputs_modelo['probabilidad_perdida'])
 
     # Escalares
     model.max_acciones = max_acciones
     model.w_minimo = w_minimo
     model.w_maximo = w_maximo
+    # model.w_renta_fija = w_renta_fija
+    # model.rendimiento_renta_fija = tasa_mensual_renta_fija
     model.rendimiento_minimo_portafolio = rendimiento_minimo
-    model.z = 1.96
-    
     model.tasa_libre_riesgo = 0.04 / 12
 
     # Variables
@@ -39,6 +40,7 @@ def modelo_robust_optimization(nombre_corrida, max_acciones=10, w_minimo=0.05, w
     model.ACTIVAR_ACCION = pyo.Var(model.ACCION, domain=pyo.Binary)
     model.RENDIMIENTO_PORTAFOLIO = pyo.Var(domain=pyo.Reals)
     model.RIESGO_PORTAFOLIO = pyo.Var(domain=pyo.Reals)
+    # model.SHARPE = pyo.Var(domain=pyo.Reals)
     model.COSTO_PERDIDA = pyo.Var(domain=pyo.Reals)
 
     # Restricciones
@@ -68,45 +70,38 @@ def modelo_robust_optimization(nombre_corrida, max_acciones=10, w_minimo=0.05, w
 
     @model.Constraint()
     def restriccion_rendimiento_minimo(model):
-        return sum((model.mu[i] - model.z * model.desvio[i]) * model.W[i] for i in model.ACCION) >= model.rendimiento_minimo_portafolio
+        return model.RENDIMIENTO_PORTAFOLIO >= model.rendimiento_minimo_portafolio
+
+    # @model.Constraint()
+    # def definicion_sharpe(model):
+    #     return model.SHARPE == (model.RENDIMIENTO_PORTAFOLIO - model.tasa_libre_riesgo) / model.RIESGO_PORTAFOLIO
 
     @model.Constraint()
     def definicion_costo_perdida(model):
         return model.COSTO_PERDIDA == sum(model.probabilidad_perdida[i] * model.cvar[i] * model.W[i] for i in model.ACCION)
 
-    # @model.Objective(sense=pyo.minimize)
-    # def minimizar_riesgo(model):
-    #     return model.RIESGO_PORTAFOLIO + 2 * sum(model.cvar[i] * model.W[i] for i in model.ACCION)
-    
-    @model.Objective(sense=pyo.maximize)
-    def maximizar_ganancia(model):
-        return model.RENDIMIENTO_PORTAFOLIO - model.RIESGO_PORTAFOLIO - 3 * sum(model.cvar[i] * model.W[i] for i in model.ACCION)
+    @model.Objective(sense=pyo.minimize)
+    def minimizar_riesgo(model):
+        # return model.RIESGO_PORTAFOLIO + 0.5 * model.COSTO_PERDIDA + 0.01 * sum((1- model.ACTIVAR_ACCION[i]) * model.mu[i] for i in model.ACCION)
+        return model.RIESGO_PORTAFOLIO + model.COSTO_PERDIDA + 0.1 * sum((1- model.ACTIVAR_ACCION[i]) * model.mu[i] for i in model.ACCION)
 
     opt = pyo.SolverFactory('gurobi')
     opt.options['TimeLimit'] = 1000
-    opt.options['MIPGap'] = 0
+    opt.options['MIPGap'] = 0.02
     results = opt.solve(model, tee=True)
-
-    # ============================================================================
-    # POSTPROCESAMIENTO: Generar reporte Excel
-    # ============================================================================
-
-    from utils.Postprocesamiento import generar_reporte_excel
-    import os
-
-    # Generar reporte en la carpeta de la corrida
-    ruta_reporte = os.path.join(f'Corridas/{nombre_corrida}', 'resultados_robust.xlsx')
-    generar_reporte_excel(model, inputs_modelo, ruta_reporte)
-
-    print(f"\n✅ Modelo resuelto y reporte generado en: Corridas/{nombre_corrida}/")
+    
+    pesos = {i: pyo.value(model.W[i]) for i in model.ACCION}
+    return pesos
 
 
 if __name__ == "__main__":
-    nombre_corrida = "Corrida_1_11_Robust_Optimization"
+    nombre_corrida = "20251025_150353_analisis_sp500"  # Cambiar según la corrida deseada
     
     max_acciones = 10
     w_minimo = 0.05
     w_maximo = 0.3
-    rendimiento_minimo = -5
-
-    modelo_robust_optimization(nombre_corrida, max_acciones, w_minimo, w_maximo, rendimiento_minimo)
+    # w_renta_fija = 0.2
+    # tasa_mensual_renta_fija = 0.08/12
+    rendimiento_minimo = np.log(0.015)
+    
+    modelo_minimizador_riesgo(nombre_corrida, max_acciones, w_minimo, w_maximo, rendimiento_minimo)
