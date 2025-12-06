@@ -201,7 +201,7 @@ with tab1:
             with st.spinner("Descargando datos del S&P 500 y SPY..."):
                 try:
                     # Importar función de carga
-                    from Pipeline_Modelos_Propios.utils.CargarDatos import descargar_sp500_mensual, descargar_spy
+                    from utils_backend.utils.CargarDatos import descargar_sp500_mensual, descargar_spy
                     
                     # Descargar datos desde el inicio del preprocesamiento hasta el fin del backtesting
                     # para tener todos los datos necesarios
@@ -518,7 +518,7 @@ with tab2:
     if st.button("🚀 EJECUTAR BACKTESTING", type="primary", use_container_width=True):
         
         # Importar funciones necesarias
-        from Pipeline_Modelos_Propios.funciones_backtesting import ejecutar_backtesting_completo
+        from utils_backend.funciones_backtesting import ejecutar_backtesting_completo
         
         # Contenedor para resultados
         resultados_todos = []
@@ -569,7 +569,7 @@ with tab2:
         st.subheader("4️⃣ Resultados del Backtesting")
         
         # Importar función de visualización
-        from Pipeline_Modelos_Propios.funciones_backtesting import mostrar_resultados_comparativos
+        from utils_backend.funciones_backtesting import mostrar_resultados_comparativos
         
         # Mostrar gráficos comparativos
         mostrar_resultados_comparativos(st.session_state.resultados_backtesting)

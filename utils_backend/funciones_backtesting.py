@@ -35,7 +35,7 @@ def get_modelo_wrapper(nombre_modelo, parametros):
         def wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None):
             
             # Modo dinámico: usar modelo con turnover
-            from Pipeline_Modelos_Propios.ModeloMinimizadorRiesgo import modelo_minimizador_riesgo
+            from utils_backend.ModeloMinimizadorRiesgo import modelo_minimizador_riesgo
                 
             # Si no existe la versión custom, usar la original
             try:
@@ -55,7 +55,7 @@ def get_modelo_wrapper(nombre_modelo, parametros):
         def wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None):
             
             # Modo dinámico: usar modelo con turnover
-            from Pipeline_Modelos_Propios.ModeloMaximizadorBeneficio import modelo_maximizador_beneficio
+            from utils_backend.ModeloMaximizadorBeneficio import modelo_maximizador_beneficio
                 
             # Si no existe la versión custom, usar la original
             try:
@@ -77,7 +77,7 @@ def get_modelo_wrapper(nombre_modelo, parametros):
             
             if pesos_anteriores is not None:
                 # Modo dinámico: usar modelo con turnover
-                from Pipeline_Modelos_Propios.OptimizarCarteraDinamico import minimizar_riesgo_dinamico_custom
+                from utils_backend.OptimizarCarteraDinamico import minimizar_riesgo_dinamico_custom
                 
                 # Si no existe la versión custom, usar la original
                 try:
@@ -95,7 +95,7 @@ def get_modelo_wrapper(nombre_modelo, parametros):
                     )
                 except (ImportError, TypeError):
                     # Fallback a versión original
-                    from Pipeline_Modelos_Propios.OptimizarCarteraDinamico import minimizar_riesgo_dinamico
+                    from utils_backend.OptimizarCarteraDinamico import minimizar_riesgo_dinamico
                     return minimizar_riesgo_dinamico(
                         mu_dict, Sigma_dict, delta_dict,
                         w_actual=pesos_anteriores,
@@ -103,7 +103,7 @@ def get_modelo_wrapper(nombre_modelo, parametros):
                     )
             else:
                 # Modo estático: primer rebalanceo
-                from Pipeline_Modelos_Propios.OptimizarCartera import minimizar_riesgo_custom
+                from utils_backend.OptimizarCartera import minimizar_riesgo_custom
                 
                 try:
                     return minimizar_riesgo_custom(
@@ -118,7 +118,7 @@ def get_modelo_wrapper(nombre_modelo, parametros):
                     )
                 except (ImportError, TypeError):
                     # Fallback a versión original
-                    from Pipeline_Modelos_Propios.OptimizarCartera import minimizar_riesgo
+                    from utils_backend.OptimizarCartera import minimizar_riesgo
                     return minimizar_riesgo(
                         mu_dict, Sigma_dict, delta_dict,
                         aversion=parametros.get('aversion_riesgo', 2)
