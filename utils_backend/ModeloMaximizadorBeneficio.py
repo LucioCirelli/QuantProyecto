@@ -5,25 +5,44 @@ from pyomo.common.timing import report_timing
 
 report_timing()
 
-def modelo_maximizador_beneficio(nombre_corrida, max_acciones=10, w_minimo=0.05, w_maximo=0.3, rendimiento_minimo=np.log(0.01)):
-    """Ejecuta el modelo maximizador de beneficio con los parámetros dados."""
-
-    # Lectura de datos
-    with open(f'Corridas/{nombre_corrida}/inputs_modelo.pkl', 'rb') as f:
-       inputs_modelo = pickle.load(f)
+def modelo_maximizador_beneficio(mu_dict, Sigma_dict, delta_dict, cvar_dict=None, var_dict=None, prob_perdida_dict=None,
+                                 max_acciones=10, w_minimo=0.05, w_maximo=0.3, rendimiento_minimo=np.log(0.01)):
+    """Ejecuta el modelo maximizador de beneficio con los parámetros dados.
+    
+    Args:
+        mu_dict: Dict de rendimientos esperados {ticker: valor}
+        Sigma_dict: Dict de matriz de covarianza {(ticker1, ticker2): valor}
+        delta_dict: Dict de desviaciones estándar {ticker: valor}
+        cvar_dict: Dict de CVaR {ticker: valor} (opcional, se calcula si no se provee)
+        var_dict: Dict de VaR {ticker: valor} (opcional, se calcula si no se provee)
+        prob_perdida_dict: Dict de probabilidad de pérdida {ticker: valor} (opcional, default 5%)
+        max_acciones: Máximo número de acciones
+        w_minimo: Peso mínimo por acción
+        w_maximo: Peso máximo por acción
+        rendimiento_minimo: Rendimiento mínimo del portfolio
+    """
 
     model = pyo.ConcreteModel()
 
     # Conjuntos
-    model.ACCION = pyo.Set(initialize=inputs_modelo['set_acciones'])
+    model.ACCION = pyo.Set(initialize=list(mu_dict.keys()))
 
     # Parámetros
-    model.mu = pyo.Param(model.ACCION, initialize=inputs_modelo['rendimiento_esperado'])
-    model.desvio = pyo.Param(model.ACCION, initialize=inputs_modelo['desvio_estandar'])
-    model.cov = pyo.Param(model.ACCION, model.ACCION, initialize=inputs_modelo['covarianzas'])
-    model.cvar = pyo.Param(model.ACCION,initialize=inputs_modelo['cvar'])
-    model.probabilidad_perdida = pyo.Param(model.ACCION,initialize=inputs_modelo['probabilidad_perdida']) # No se usa en este modelo, es para el postprocess
-    model.var = pyo.Param(model.ACCION,initialize=inputs_modelo['var']) # No se usa en este modelo, es para el postprocess
+    model.mu = pyo.Param(model.ACCION, initialize=mu_dict)
+    model.desvio = pyo.Param(model.ACCION, initialize=delta_dict)
+    model.cov = pyo.Param(model.ACCION, model.ACCION, initialize=Sigma_dict)
+    
+    # CVaR, VaR y probabilidad_perdida - usar proporcionados o calcular por defecto
+    if cvar_dict is None:
+        cvar_dict = {ticker: 1.96 * delta_dict[ticker] for ticker in mu_dict.keys()}
+    if var_dict is None:
+        var_dict = {ticker: 1.65 * delta_dict[ticker] for ticker in mu_dict.keys()}
+    if prob_perdida_dict is None:
+        prob_perdida_dict = {ticker: 0.05 for ticker in mu_dict.keys()}
+    
+    model.cvar = pyo.Param(model.ACCION, initialize=cvar_dict)
+    model.probabilidad_perdida = pyo.Param(model.ACCION, initialize=prob_perdida_dict)  # No se usa en este modelo, es para el postprocess
+    model.var = pyo.Param(model.ACCION, initialize=var_dict)  # No se usa en este modelo, es para el postprocess
 
     # Escalares
     model.max_acciones = max_acciones

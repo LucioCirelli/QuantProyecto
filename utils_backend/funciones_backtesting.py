@@ -28,52 +28,59 @@ def get_modelo_wrapper(nombre_modelo, parametros):
     Retorna una función wrapper para el modelo especificado.
     
     La función retornada tiene signature:
-        wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None) -> dict de pesos
+        wrapper(mu_dict, Sigma_dict, delta_dict, cvar_dict, var_dict, prob_perdida_dict, pesos_anteriores) -> dict de pesos
     """
     
     if nombre_modelo == 'minimizador_riesgo':
-        def wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None):
-            
-            # Modo dinámico: usar modelo con turnover
+        def wrapper(mu_dict, Sigma_dict, delta_dict, cvar_dict=None, var_dict=None, prob_perdida_dict=None, pesos_anteriores=None):
             from utils_backend.ModeloMinimizadorRiesgo import modelo_minimizador_riesgo
-                
-            # Si no existe la versión custom, usar la original
+            
             try:
                 return modelo_minimizador_riesgo(
-                nombre_corrida='temp',
-                max_acciones=parametros.get('max_acciones', 10),
-                w_minimo=parametros.get('w_minimo', 0.05),
-                w_maximo=parametros.get('w_maximo', 0.3),
-                rendimiento_minimo=parametros.get('rendimiento_minimo', np.log(0.015))
-            )
-            except (Exception):
-                return {}
-        
-        return wrapper
-    
-    elif nombre_modelo == 'maximizador_beneficio':
-        def wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None):
-            
-            # Modo dinámico: usar modelo con turnover
-            from utils_backend.ModeloMaximizadorBeneficio import modelo_maximizador_beneficio
-                
-            # Si no existe la versión custom, usar la original
-            try:
-                return modelo_maximizador_beneficio(
-                    nombre_corrida='temp',
+                    mu_dict=mu_dict,
+                    Sigma_dict=Sigma_dict,
+                    delta_dict=delta_dict,
+                    cvar_dict=cvar_dict,
+                    var_dict=var_dict,
+                    prob_perdida_dict=prob_perdida_dict,
                     max_acciones=parametros.get('max_acciones', 10),
                     w_minimo=parametros.get('w_minimo', 0.05),
                     w_maximo=parametros.get('w_maximo', 0.3),
                     rendimiento_minimo=parametros.get('rendimiento_minimo', np.log(1.015))
                 )
                 
-            except Exception:
+            except Exception as e:
+                print(f"Error en minimizador_riesgo: {e}")
+                return {}
+        
+        return wrapper
+    
+    elif nombre_modelo == 'maximizador_beneficio':
+        def wrapper(mu_dict, Sigma_dict, delta_dict, cvar_dict=None, var_dict=None, prob_perdida_dict=None, pesos_anteriores=None):
+            from utils_backend.ModeloMaximizadorBeneficio import modelo_maximizador_beneficio
+            
+            try:
+                return modelo_maximizador_beneficio(
+                    mu_dict=mu_dict,
+                    Sigma_dict=Sigma_dict,
+                    delta_dict=delta_dict,
+                    cvar_dict=cvar_dict,
+                    var_dict=var_dict,
+                    prob_perdida_dict=prob_perdida_dict,
+                    max_acciones=parametros.get('max_acciones', 10),
+                    w_minimo=parametros.get('w_minimo', 0.05),
+                    w_maximo=parametros.get('w_maximo', 0.3),
+                    rendimiento_minimo=parametros.get('rendimiento_minimo', np.log(1.015))
+                )
+                
+            except Exception as e:
+                print(f"Error en maximizador_beneficio: {e}")
                 return {}
         
         return wrapper
     
     elif nombre_modelo == 'mvo':
-        def wrapper(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=None):
+        def wrapper(mu_dict, Sigma_dict, delta_dict, cvar_dict=None, var_dict=None, prob_perdida_dict=None, pesos_anteriores=None):
             
             if pesos_anteriores is not None:
                 # Modo dinámico: usar modelo con turnover
@@ -251,10 +258,36 @@ def ejecutar_backtesting_completo(df_tickers, df_spy, nombre_modelo, parametros,
         mu_dict = mu.to_dict()
         Sigma_dict = Sigma.stack().to_dict()
         delta_dict = pd.Series(delta, index=Sigma.index).to_dict()
+        sigma_dict = pd.Series(sigma_i, index=Sigma.index).to_dict()
+        
+        # ====================================================================
+        # CALCULAR CVaR, VaR Y PROBABILIDAD DE PÉRDIDA (para modelos Pyomo)
+        # ====================================================================
+        # CVaR al 95% de confianza: |mu + 2.06 * sigma|
+        # Fórmula: CVaR_0.95 ≈ |μ + 2.06σ| para distribución normal
+        cvar_dict = {ticker: abs(mu_dict[ticker] + 2.06 * sigma_dict[ticker]) 
+                     for ticker in sigma_dict.keys()}
+        
+        # VaR al 95% de confianza: |mu + 1.65 * sigma|
+        # Fórmula: VaR_0.95 = |μ + 1.65σ| para distribución normal
+        var_dict = {ticker: abs(mu_dict[ticker] + 1.65 * sigma_dict[ticker]) 
+                    for ticker in sigma_dict.keys()}
+        
+        # Probabilidad de pérdida: % de retornos negativos históricos
+        prob_perdida_dict = {}
+        for ticker in mu_dict.keys():
+            ticker_returns = df_window[df_window['Ticker'] == ticker]['Return']
+            if len(ticker_returns) > 0:
+                prob_perdida_dict[ticker] = (ticker_returns < 0).mean()
+            else:
+                prob_perdida_dict[ticker] = 0.05  # Default 5%
         
         # Ejecutar modelo (wrapper retorna dict de pesos)
         try:
-            pesos = wrapper_modelo(mu_dict, Sigma_dict, delta_dict, pesos_anteriores=pesos_anteriores)
+            pesos = wrapper_modelo(mu_dict, Sigma_dict, delta_dict, 
+                                  cvar_dict=cvar_dict, var_dict=var_dict, 
+                                  prob_perdida_dict=prob_perdida_dict,
+                                  pesos_anteriores=pesos_anteriores)
             
             # # Validar que se obtuvieron pesos
             # if not pesos or all(v == 0 for v in pesos.values()):
