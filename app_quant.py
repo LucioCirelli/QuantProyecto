@@ -93,7 +93,7 @@ with st.sidebar:
     **Modelos disponibles:**
     - Minimizador de Riesgo
     - Maximizador de Beneficio
-    - MVO Dinámico
+    - Robusto
     """)
     
     st.markdown("---")
@@ -370,7 +370,7 @@ with tab1:
             st.success("✅ Guardado")
     
     with col3:
-        st.markdown("##### 🎯 MVO Dinámico")
+        st.markdown("##### 🎯 Robusto")
         
         aversion = st.number_input(
             "Aversión al riesgo",
@@ -412,23 +412,13 @@ with tab1:
             key='wmin_mvo'
         )
         
-        turnover_mvo = st.slider(
-            "Turnover limit",
-            0.0, 1.0,
-            st.session_state.parametros_mvo['turnover_limit'],
-            step=0.05,
-            help="Máximo cambio permitido en pesos (1.0 = sin restricción)",
-            key='turnover_mvo'
-        )
-        
         if st.button("💾 Guardar", key='save_mvo', use_container_width=True):
             st.session_state.parametros_mvo = {
                 'aversion_riesgo': aversion,
                 'max_activos': max_act_mvo,
                 'min_activos': min_act_mvo,
                 'peso_maximo': w_max_mvo,
-                'peso_minimo': w_min_mvo,
-                'turnover_limit': turnover_mvo
+                'peso_minimo': w_min_mvo
             }
             st.success("✅ Guardado")
 
@@ -492,7 +482,7 @@ with tab2:
     with col2:
         run_robust = st.checkbox("🛡️ Modelo Maximizador de Beneficio", value=False)
     with col3:
-        run_mvo = st.checkbox("🎯 MVO Dinámico", value=True)
+        run_mvo = st.checkbox("🎯 Robusto", value=False)
     
     modelos_seleccionados = []
     if run_estocastico:
@@ -500,7 +490,7 @@ with tab2:
     if run_robust:
         modelos_seleccionados.append(('maximizador_beneficio', 'Maximizador de Beneficio', st.session_state.parametros_max_beneficio))
     if run_mvo:
-        modelos_seleccionados.append(('mvo', 'MVO Dinámico', st.session_state.parametros_mvo))
+        modelos_seleccionados.append(('mvo', 'Robusto', st.session_state.parametros_mvo))
     
     if len(modelos_seleccionados) == 0:
         st.warning("⚠️ Debes seleccionar al menos un modelo")

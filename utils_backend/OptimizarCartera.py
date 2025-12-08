@@ -68,7 +68,7 @@ def minimizar_riesgo_custom(mu_dict, Sigma_dict, delta_dict, aversion=2,
         solver = pyo.SolverFactory('gurobi')
         #set gap
         solver.options['MIPGap'] = 0.01
-        solver.solve(modelo, tee=False)
+        solver.solve(modelo, tee=True)
         pesos = {i: pyo.value(modelo.PESO_ACTIVO[i]) for i in modelo.S}
         return pesos
     except Exception as e:

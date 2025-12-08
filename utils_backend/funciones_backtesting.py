@@ -82,54 +82,26 @@ def get_modelo_wrapper(nombre_modelo, parametros):
     elif nombre_modelo == 'mvo':
         def wrapper(mu_dict, Sigma_dict, delta_dict, cvar_dict=None, var_dict=None, prob_perdida_dict=None, pesos_anteriores=None):
             
-            if pesos_anteriores is not None:
-                # Modo dinámico: usar modelo con turnover
-                from utils_backend.OptimizarCarteraDinamico import minimizar_riesgo_dinamico_custom
-                
-                # Si no existe la versión custom, usar la original
-                try:
-                    return minimizar_riesgo_dinamico_custom(
-                        mu_dict=mu_dict,
-                        Sigma_dict=Sigma_dict,
-                        delta_dict=delta_dict,
-                        w_actual=pesos_anteriores,
-                        aversion=parametros.get('aversion_riesgo', 2),
-                        size_portfolio_max=parametros.get('max_activos', 30),
-                        size_portfolio_min=parametros.get('min_activos', 20),
-                        peso_maximo=parametros.get('peso_maximo', 0.10),
-                        peso_minimo=parametros.get('peso_minimo', 0.015),
-                        turnover_limit=parametros.get('turnover_limit', 0.75)
-                    )
-                except (ImportError, TypeError):
-                    # Fallback a versión original
-                    from utils_backend.OptimizarCarteraDinamico import minimizar_riesgo_dinamico
-                    return minimizar_riesgo_dinamico(
-                        mu_dict, Sigma_dict, delta_dict,
-                        w_actual=pesos_anteriores,
-                        aversion=parametros.get('aversion_riesgo', 2)
-                    )
-            else:
-                # Modo estático: primer rebalanceo
-                from utils_backend.OptimizarCartera import minimizar_riesgo_custom
-                
-                try:
-                    return minimizar_riesgo_custom(
-                        mu_dict=mu_dict,
-                        Sigma_dict=Sigma_dict,
-                        delta_dict=delta_dict,
-                        aversion=parametros.get('aversion_riesgo', 2),
-                        size_portfolio_max=parametros.get('max_activos', 30),
-                        size_portfolio_min=parametros.get('min_activos', 20),
-                        peso_maximo=parametros.get('peso_maximo', 0.10),
-                        peso_minimo=parametros.get('peso_minimo', 0.015)
-                    )
-                except (ImportError, TypeError):
-                    # Fallback a versión original
-                    from utils_backend.OptimizarCartera import minimizar_riesgo
-                    return minimizar_riesgo(
-                        mu_dict, Sigma_dict, delta_dict,
-                        aversion=parametros.get('aversion_riesgo', 2)
-                    )
+            from utils_backend.OptimizarCartera import minimizar_riesgo_custom
+            
+            try:
+                return minimizar_riesgo_custom(
+                    mu_dict=mu_dict,
+                    Sigma_dict=Sigma_dict,
+                    delta_dict=delta_dict,
+                    aversion=parametros.get('aversion_riesgo', 2),
+                    size_portfolio_max=parametros.get('max_activos', 30),
+                    size_portfolio_min=parametros.get('min_activos', 20),
+                    peso_maximo=parametros.get('peso_maximo', 0.10),
+                    peso_minimo=parametros.get('peso_minimo', 0.015)
+                )
+            except (ImportError, TypeError):
+                # Fallback a versión original
+                from utils_backend.OptimizarCartera import minimizar_riesgo
+                return minimizar_riesgo(
+                    mu_dict, Sigma_dict, delta_dict,
+                    aversion=parametros.get('aversion_riesgo', 2)
+                )
         
         return wrapper
     
@@ -351,6 +323,9 @@ def ejecutar_backtesting_completo(df_tickers, df_spy, nombre_modelo, parametros,
     df_plot['Cum_Benchmark'] = df_plot['Benchmark_Return'].cumsum()
     df_plot['Cum_Portfolio_Pct'] = np.exp(df_plot['Cum_Portfolio']) - 1
     df_plot['Cum_Benchmark_Pct'] = np.exp(df_plot['Cum_Benchmark']) - 1
+    
+    print(df_plot)
+    df_plot.to_clipboard()
     
     # Calcular métricas
     metricas = calcular_metricas(df_plot, rebalance_freq)
