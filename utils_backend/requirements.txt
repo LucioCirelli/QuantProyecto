@@ -1,4 +1,3 @@
-# Requirements para Pipeline Modelos Propios
 # Optimización de Portafolios con Modelos Estocástico, Robust y Franco
 
 # Core scientific computing
