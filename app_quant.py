@@ -136,7 +136,7 @@ with tab1:
     with col1:
         preprocess_start_year = st.number_input(
             "Año inicial preprocesamiento",
-            min_value=2000,
+            min_value=1990,
             max_value=2025,
             value=st.session_state.preprocess_start_year,
             step=1,
